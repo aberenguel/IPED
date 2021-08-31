@@ -76,6 +76,7 @@ public class ImageThumbTask extends ThumbTask {
             if (!extConvPropInit.get()) {
                 System.setProperty(ExternalImageConverter.enabledProp, String.valueOf(imgThumbConfig.isEnableExternalConv()));
                 System.setProperty(ExternalImageConverter.useGMProp, String.valueOf(imgThumbConfig.isUseGraphicsMagick()));
+                System.setProperty(ExternalImageConverter.useMagickCommandProp, String.valueOf(imgThumbConfig.isUseMagickCommand()));
                 System.setProperty(ExternalImageConverter.lowDensityProp, String.valueOf(imgThumbConfig.getLowResDensity()));
                 System.setProperty(ExternalImageConverter.highDensityProp, String.valueOf(imgThumbConfig.getHighResDensity()));
                 System.setProperty(ExternalImageConverter.magickAreaLimitProp, String.valueOf(imgThumbConfig.getMaxMPixelsInMemory()));

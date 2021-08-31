@@ -10,6 +10,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -30,6 +31,7 @@ public class ExternalImageConverter implements Closeable {
 
     public static final String enabledProp = prefix + "enabled"; //$NON-NLS-1$
     public static final String useGMProp = prefix + "useGM"; //$NON-NLS-1$
+    public static final String useMagickCommandProp = prefix + "useMagickCommand"; //$NON-NLS-1$
     public static final String winToolPathPrefixProp = prefix + "winToolPathPrefix"; //$NON-NLS-1$
     public static final String lowDensityProp = prefix + "lowDensity"; //$NON-NLS-1$
     public static final String highDensityProp = prefix + "highDensity"; //$NON-NLS-1$
@@ -57,6 +59,7 @@ public class ExternalImageConverter implements Closeable {
     private final String toolPath;
     private final boolean enabled;
     private final boolean useGM;
+    private final boolean useMagickCommand;
     private final int lowDensity;
     private final int highDensity;
     private final String magickAreaLimit;
@@ -84,6 +87,7 @@ public class ExternalImageConverter implements Closeable {
 
         enabled = Boolean.valueOf(System.getProperty(enabledProp, "false").trim()); //$NON-NLS-1$
         useGM = Boolean.valueOf(System.getProperty(useGMProp, "false").trim()); //$NON-NLS-1$
+        useMagickCommand = Boolean.valueOf(System.getProperty(useMagickCommandProp, "true").trim()); //$NON-NLS-1$
         winToolPathPrefix = System.getProperty(winToolPathPrefixProp, "").trim(); //$NON-NLS-1$
         lowDensity = Integer.parseInt(System.getProperty(lowDensityProp, "96").trim()); //$NON-NLS-1$
         highDensity = Integer.parseInt(System.getProperty(highDensityProp, "250").trim()); //$NON-NLS-1$
@@ -126,6 +130,9 @@ public class ExternalImageConverter implements Closeable {
             else if (c.equals(INPUT))
                 cmd[i] = objIn instanceof File ? ((File) objIn).getAbsolutePath() : "-";
         }
+        if (!useGM && !useMagickCommand) {
+            cmd = Arrays.copyOfRange(cmd, 1, cmd.length);
+        }
         return cmd;
     }
 
@@ -154,6 +161,9 @@ public class ExternalImageConverter implements Closeable {
         pb.environment().put(MAGICK_AREA_LIMIT, magickAreaLimit);
 
         String[] cmd = { CMD[0], "identify", "-ping", "-format", "%w %h", "-" };
+        if (!useGM && !useMagickCommand) {
+            cmd = Arrays.copyOfRange(cmd, 1, cmd.length);
+        }
         try {
             pb.command(cmd);
             Process p = pb.start();

@@ -15,6 +15,7 @@ public class ImageThumbTaskConfig extends AbstractTaskPropertiesConfig {
 
     private boolean enableExternalConv = true;
     private boolean useGraphicsMagick = false;
+    private boolean useMagickCommand = true;
     private boolean extractThumb = true;
     private boolean logGalleryRendering = false;
     private int minTimeout = 20;
@@ -31,6 +32,10 @@ public class ImageThumbTaskConfig extends AbstractTaskPropertiesConfig {
 
     public boolean isUseGraphicsMagick() {
         return useGraphicsMagick;
+    }
+
+    public boolean isUseMagickCommand() {
+        return useMagickCommand;
     }
 
     public boolean isExtractThumb() {
@@ -92,6 +97,11 @@ public class ImageThumbTaskConfig extends AbstractTaskPropertiesConfig {
             useGraphicsMagick = true;
         } else {
             useGraphicsMagick = false;
+        }
+
+        value = properties.getProperty("useMagickCommand"); //$NON-NLS-1$
+        if (value != null) {
+            useMagickCommand = Boolean.valueOf(value.trim());
         }
 
         value = properties.getProperty("imgConvTimeout"); //$NON-NLS-1$
