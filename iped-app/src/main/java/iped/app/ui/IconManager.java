@@ -473,6 +473,7 @@ public class IconManager {
         if (icon != null) {
             mimeIconMap.put("application/x-ufed-logentry", icon);
             mimeIconMap.put("application/x-ufed-html-logs", icon);
+            mimeIconMap.put("application/x-whatsapp-logentry", icon);
         }
 
         icon = availableIconsMap.get("sms");
@@ -574,6 +575,7 @@ public class IconManager {
             mimeIconMap.put("application/x-ex01-image", icon);
             mimeIconMap.put("application/x-disk-image", icon);
             mimeIconMap.put("application/x-raw-image", icon);
+            mimeIconMap.put("application/x-apple-diskimage", icon);
         }
 
         icon = availableIconsMap.get("rfb");
