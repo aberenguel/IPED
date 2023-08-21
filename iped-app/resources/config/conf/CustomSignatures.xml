@@ -685,7 +685,12 @@
     <mime-type type="application/x-volume-shadow">
         <glob pattern="*{3808876b-c176-4e48-b7ae-04046e6cc752}*"/>
     </mime-type>
-    
+
+    <mime-type type="application/x-apple-diskimage">
+        <sub-class-of type="application/x-disk-image"/>
+        <glob pattern="*.dmg"/>
+    </mime-type>
+
     <mime-type type="application/x-vdi">
         <sub-class-of type="application/x-disk-image"/>
         <glob pattern="*.vdi"/>

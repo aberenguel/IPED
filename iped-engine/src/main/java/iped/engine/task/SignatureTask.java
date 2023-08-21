@@ -94,6 +94,10 @@ public class SignatureTask extends AbstractTask {
                 if (type != null && type.toString().equals("application/x-tika-ooxml-protected") //$NON-NLS-1$
                         && (ext.equals("docx") || ext.equals("xlsx") || ext.equals("pptx"))) { //$NON-NLS-1$
                     type = MediaType.application("x-tika-ooxml-protected-" + ext); //$NON-NLS-1$
+
+                } else if (ext.equals("dmg") && (type == null || !type.toString().equals(MediaTypes.DMG_IMAGE.getType())) //$NON-NLS-1$
+                        && hasDMGFooter(evidence)) {
+                    type = MediaTypes.DMG_IMAGE;
                 }
 
                 if (type == null) {
@@ -131,6 +135,22 @@ public class SignatureTask extends AbstractTask {
             byte[] cookie = IOUtils.readFully(is, 9);
             if ("conectix".equals(new String(cookie, 0, 8, StandardCharsets.ISO_8859_1))
                     || "conectix".equals(new String(cookie, 1, 8, StandardCharsets.ISO_8859_1))) {
+                return true;
+            }
+        } catch (IOException e) {
+            // ignore
+        }
+        return false;
+    }
+
+    private boolean hasDMGFooter(IItem item) {
+        if (item.getLength() == null && item.getLength() > 512) {
+            return false;
+        }
+        try (SeekableInputStream is = item.getSeekableInputStream()) {
+            is.seek(item.getLength() - 512);
+            byte[] kolyBytes = IOUtils.readFully(is, 4);
+            if ("koly".equals(new String(kolyBytes, StandardCharsets.US_ASCII))) {
                 return true;
             }
         } catch (IOException e) {
