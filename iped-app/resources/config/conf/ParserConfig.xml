@@ -263,6 +263,7 @@
         <parser class="iped.parsers.browsers.safari.SafariSqliteParser"></parser>
         <parser class="iped.parsers.browsers.safari.SafariPlistParser"></parser>
         
+        <parser class="iped.parsers.apple.dmg.DmgParser"></parser>
         <parser class="iped.parsers.database.EDBParser"></parser>
         <parser class="iped.parsers.registry.RegRipperParser"></parser>
         <parser class="iped.parsers.browsers.ie.IndexDatParser"></parser>

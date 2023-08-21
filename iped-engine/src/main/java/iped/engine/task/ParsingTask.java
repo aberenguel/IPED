@@ -285,6 +285,12 @@ public class ParsingTask extends ThumbTask implements EmbeddedDocumentExtractor 
         if (caseData != null && caseData.isIpedReport()) {
             return false;
         }
+
+        // always expand if processing a DMG as evidence in command line
+        if (item.getParentId() == null && MediaTypes.DMG_IMAGE.equals(item.getMediaType())) {
+            return true;
+        }
+
         return WhatsAppParser.WA_USER_PLIST.equals(item.getMediaType())
                 || WhatsAppParser.WA_USER_XML.equals(item.getMediaType()) 
                 || TelegramParser.TELEGRAM_USER_CONF.equals(item.getMediaType());

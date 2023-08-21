@@ -232,6 +232,11 @@
             <artifactId>RagingMoose</artifactId>
             <version>c92dba11561cb1423dd81e3bb9dea8ae92a392d3</version>
         </dependency>
+        <dependency>
+            <groupId>org.catacombae</groupId>
+            <artifactId>dmgextractor</artifactId>
+            <version>0.0.1-SNAPSHOT</version>
+        </dependency>
     </dependencies>
     
     <build>
