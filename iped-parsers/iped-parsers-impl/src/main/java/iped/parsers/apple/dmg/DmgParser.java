@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.RandomAccessFile;
+import java.nio.charset.StandardCharsets;
 import java.util.Set;
 
 import org.apache.tika.exception.TikaException;
@@ -15,6 +16,7 @@ import org.apache.tika.metadata.TikaCoreProperties;
 import org.apache.tika.mime.MediaType;
 import org.apache.tika.parser.AbstractParser;
 import org.apache.tika.parser.ParseContext;
+import org.catacombae.dmg.udif.UDIFFileView;
 import org.catacombae.dmg.udif.UDIFInputStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -49,26 +51,31 @@ public class DmgParser extends AbstractParser {
         try {
             File streamFile = ((TikaInputStream) stream).getFile();
 
-            Metadata subMeta = new Metadata();
-            subMeta.set(StandardParser.INDEXER_CONTENT_TYPE, "application/x-raw-image");
-            subMeta.set(TikaCoreProperties.RESOURCE_NAME_KEY, metadata.get(TikaCoreProperties.RESOURCE_NAME_KEY) + " [uncompressed]");
+            Metadata rawImageMeta = new Metadata();
+            rawImageMeta.set(StandardParser.INDEXER_CONTENT_TYPE, MediaTypes.RAW_IMAGE.toString());
+            rawImageMeta.set(TikaCoreProperties.TITLE, "Uncompressed_Image");
 
-            UDIFInputStream subitemStream = new UDIFInputStream(new RandomAccessFile(streamFile, "r"), streamFile.getAbsolutePath());
+            try (UDIFFileView dmgView = new UDIFFileView(streamFile)) {
+                rawImageMeta.set("dmg:kolyData", dmgView.getKoly().toString());
+                rawImageMeta.set("dmg:plist", new String(dmgView.getPlistData(), StandardCharsets.UTF_8));
+            }
 
-            EmbeddedDocumentExtractor extractor = context.get(EmbeddedDocumentExtractor.class, new ParsingEmbeddedDocumentExtractor(context));
-            extractor.parseEmbedded(subitemStream, handler, subMeta, false);
+            try (UDIFInputStream rawImageStream = new UDIFInputStream(new RandomAccessFile(streamFile, "r"),
+                    streamFile.getAbsolutePath())) {
+                EmbeddedDocumentExtractor extractor = context.get(EmbeddedDocumentExtractor.class, new ParsingEmbeddedDocumentExtractor(context));
+                extractor.parseEmbedded(rawImageStream, handler, rawImageMeta, false);
+            }
 
         } catch (Exception e) {
 
             // abort if the DMG file is the root evidence
             IItemReader item = context.get(IItemReader.class);
-            if (item != null && item.getParentId() == null) {
+            if (item != null && item.isRoot()) {
                 logger.error("Error processing DMG file", e);
                 System.exit(1);
             }
 
             throw e;
         }
-
     }
 }

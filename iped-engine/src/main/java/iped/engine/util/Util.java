@@ -61,6 +61,8 @@ import org.apache.tika.detect.microsoft.POIFSContainerDetector;
 import org.apache.tika.io.TikaInputStream;
 import org.apache.tika.metadata.Metadata;
 import org.apache.tika.mime.MediaType;
+import org.catacombae.dmg.udif.UDIFFileView;
+import org.catacombae.io.RuntimeIOException;
 
 import com.sun.jna.Native;
 
@@ -256,6 +258,18 @@ public class Util {
     public static boolean isPhysicalDrive(File file) {
         return file.getName().toLowerCase().startsWith("physicaldrive") //$NON-NLS-1$
                 || file.getAbsolutePath().toLowerCase().startsWith("/dev/"); //$NON-NLS-1$
+    }
+
+    /*
+     * Returns true is the file is Apple Mac OS X Universal Disk Image Format (UDIF)
+     */
+    public static boolean isUDIFFile(File file) {
+        try (UDIFFileView dmgView = new UDIFFileView(file)) {
+            dmgView.getKoly();
+            return true;
+        } catch (RuntimeIOException e) {
+        }
+        return false;
     }
 
     public static Path getResolvedFile(String prefix, String suffix) {

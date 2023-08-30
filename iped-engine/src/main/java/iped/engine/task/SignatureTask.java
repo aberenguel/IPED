@@ -95,9 +95,8 @@ public class SignatureTask extends AbstractTask {
                         && (ext.equals("docx") || ext.equals("xlsx") || ext.equals("pptx"))) { //$NON-NLS-1$
                     type = MediaType.application("x-tika-ooxml-protected-" + ext); //$NON-NLS-1$
 
-                } else if (ext.equals("dmg") && (type == null || !type.toString().equals(MediaTypes.DMG_IMAGE.getType())) //$NON-NLS-1$
-                        && hasDMGFooter(evidence)) {
-                    type = MediaTypes.DMG_IMAGE;
+                } else if (ext.equals("dmg")) {
+                    type = hasUDIFFooter(evidence) ?  MediaTypes.DMG_IMAGE : MediaTypes.RAW_IMAGE;
                 }
 
                 if (type == null) {
@@ -143,7 +142,7 @@ public class SignatureTask extends AbstractTask {
         return false;
     }
 
-    private boolean hasDMGFooter(IItem item) {
+    private boolean hasUDIFFooter(IItem item) {
         if (item.getLength() == null && item.getLength() > 512) {
             return false;
         }

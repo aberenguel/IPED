@@ -185,11 +185,15 @@ public class SleuthkitReader extends DataSourceReader {
                 || name.endsWith(".vmdk") //$NON-NLS-1$
                 || name.endsWith(".vhd") //$NON-NLS-1$
                 || name.endsWith(".vhdx") //$NON-NLS-1$
-                || isPhysicalDrive(file) || (isISO9660 = isISO9660(file)) || name.equals(DB_NAME);
+                || isPhysicalDrive(file) || isDmgRawFile(file)  || (isISO9660 = isISO9660(file)) || name.equals(DB_NAME);
     }
 
     public static boolean isPhysicalDrive(File file) {
         return Util.isPhysicalDrive(file);
+    }
+
+    public static boolean isDmgRawFile(File file) {
+        return file.getName().toLowerCase().endsWith(".dmg") && !Util.isUDIFFile(file);
     }
 
     private MediaType getMediaType(String ext) {
