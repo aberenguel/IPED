@@ -28,7 +28,6 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.search.BooleanClause.Occur;
 import org.apache.lucene.search.BooleanQuery;
-import org.apache.lucene.search.Query;
 import org.apache.lucene.search.TermInSetQuery;
 import org.apache.lucene.util.BytesRef;
 
@@ -62,6 +61,7 @@ public class ReferencingTableModel extends BaseTableModel {
     public Query createQuery(Document doc) {
         BooleanQuery.Builder queryBuilder = new BooleanQuery.Builder();
 
+        BooleanQuery.Builder queryBuilder = new BooleanQuery.Builder();
         // linkedItems queries
         String[] linkedItems = doc.getValues(ExtraProperties.LINKED_ITEMS);
         if (linkedItems.length > 0) {
@@ -89,6 +89,29 @@ public class ReferencingTableModel extends BaseTableModel {
             } else {
                 field = BasicProps.HASH;
             }
+
+            Set<BytesRef> hashes = Arrays.asList(sharedHashes).stream().filter(StringUtils::isNotBlank)
+                    .map(h -> new BytesRef(h)).collect(Collectors.toSet());
+            queryBuilder.add(new TermInSetQuery(field, hashes), Occur.SHOULD);
+        }
+
+        // ufed:jumptargets
+        String[] ufedJumpTargets = doc.getValues(ExtraProperties.UFED_JUMP_TARGETS);
+        if (ufedJumpTargets.length > 0) {
+            Set<BytesRef> targets = Arrays.asList(ufedJumpTargets).stream().filter(StringUtils::isNotBlank)
+                    .map(h -> new BytesRef(h)).collect(Collectors.toSet());
+            queryBuilder.add(new TermInSetQuery(ExtraProperties.UFED_ID, targets), Occur.SHOULD);
+        }
+
+        // ufed:file_id (needed? alrealdy contained in linkedItems)
+        String ufedFileId = doc.get(ExtraProperties.UFED_FILE_ID);
+        if (ufedFileId != null) {
+            queryBuilder.add(new TermQuery(new Term(ExtraProperties.UFED_ID, ufedFileId)), Occur.SHOULD);
+        }
+
+        BooleanQuery query = queryBuilder.build();
+
+        if (!query.clauses().isEmpty()) {
 
             Set<BytesRef> hashes = Arrays.asList(sharedHashes).stream().filter(StringUtils::isNotBlank)
                     .map(h -> new BytesRef(h)).collect(Collectors.toSet());
