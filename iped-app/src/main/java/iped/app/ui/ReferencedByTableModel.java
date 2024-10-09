@@ -19,17 +19,20 @@
 package iped.app.ui;
 
 import java.util.Arrays;
+import java.util.List;
 import java.util.stream.Collectors;
 
 import javax.swing.ListSelectionModel;
-import javax.swing.SwingUtilities;
 
+import org.apache.commons.lang3.StringUtils;
 import org.apache.lucene.document.Document;
+import org.apache.lucene.search.BooleanClause.Occur;
+import org.apache.lucene.search.BooleanQuery;
+import org.apache.lucene.search.Query;
+import org.apache.lucene.search.TermInSetQuery;
+import org.apache.lucene.util.BytesRef;
 
 import iped.data.IItem;
-import iped.engine.search.IPEDSearcher;
-import iped.engine.search.LuceneSearchResult;
-import iped.engine.search.MultiSearchResult;
 import iped.engine.task.HashTask;
 import iped.parsers.ares.AresParser;
 import iped.parsers.emule.KnownMetParser;
@@ -40,6 +43,10 @@ import iped.properties.ExtraProperties;
 public class ReferencedByTableModel extends BaseTableModel {
 
     private static final long serialVersionUID = 1L;
+
+    public ReferencedByTableModel() {
+        cleanBeforeListItems = true;
+    }
 
     @Override
     public void valueChanged(ListSelectionModel lsm) {
@@ -68,46 +75,26 @@ public class ReferencedByTableModel extends BaseTableModel {
     }
 
     @Override
-    public void listItems(Document doc) {
+    public Query createQuery(Document doc) {
+        BooleanQuery.Builder queryBuilder = new BooleanQuery.Builder();
 
+        // hashes
         String md5 = doc.get(HashTask.HASH.MD5.toString());
         String sha1 = doc.get(HashTask.HASH.SHA1.toString());
         String sha256 = doc.get(HashTask.HASH.SHA256.toString());
         String edonkey = doc.get(HashTask.HASH.EDONKEY.toString());
-        String hashes = Arrays.asList(md5, sha1, sha256, edonkey).stream().filter(a -> a != null).collect(Collectors.joining(" "));
-
-        if (hashes.isEmpty()) {
-            results = new LuceneSearchResult(0);
-            refDoc = null;
-        } else {
-            String textQuery = ExtraProperties.LINKED_ITEMS + ":(" + hashes + ") ";
-            textQuery += ExtraProperties.SHARED_HASHES + ":(" + hashes + ")";
-
-            try {
-                IPEDSearcher task = new IPEDSearcher(App.get().appCase, textQuery, BasicProps.NAME);
-                results = MultiSearchResult.get(task.multiSearch(), App.get().appCase);
-
-                final int length = results.getLength();
-
-                if (length > 0) {
-                    SwingUtilities.invokeLater(new Runnable() {
-                        @Override
-                        public void run() {
-                            App.get().referencedByDock.setTitleText(Messages.getString("ReferencedByTab.Title") + " " + length);
-                        }
-                    });
-                    refDoc = doc;
-                } else {
-                    refDoc = null;
-                }
-
-            } catch (Exception e) {
-                results = new LuceneSearchResult(0);
-                refDoc = null;
-                e.printStackTrace();
-            }
+        List<BytesRef> hashes = Arrays.asList(md5, sha1, sha256, edonkey).stream().filter(StringUtils::isNotBlank)
+                .map(h -> new BytesRef(h)).collect(Collectors.toList());
+        if (!hashes.isEmpty()) {
+            queryBuilder.add(new TermInSetQuery(ExtraProperties.LINKED_ITEMS, hashes), Occur.SHOULD);
+            queryBuilder.add(new TermInSetQuery(ExtraProperties.SHARED_HASHES, hashes), Occur.SHOULD);
         }
 
-        fireTableDataChanged();
+        return queryBuilder.build();
+    }
+
+    @Override
+    public void onListItemsResultsComplete() {
+        App.get().referencedByDock.setTitleText(Messages.getString("ReferencedByTab.Title") + " " + results.getLength());
     }
 }
