@@ -26,9 +26,12 @@ import javax.swing.ListSelectionModel;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.lucene.document.Document;
+import org.apache.lucene.index.Term;
 import org.apache.lucene.search.BooleanClause.Occur;
 import org.apache.lucene.search.BooleanQuery;
+import org.apache.lucene.search.Query;
 import org.apache.lucene.search.TermInSetQuery;
+import org.apache.lucene.search.TermQuery;
 import org.apache.lucene.util.BytesRef;
 
 import iped.engine.search.QueryBuilder;
@@ -40,6 +43,7 @@ import iped.parsers.emule.KnownMetParser;
 import iped.parsers.shareaza.ShareazaLibraryDatParser;
 import iped.properties.BasicProps;
 import iped.properties.ExtraProperties;
+import scala.annotation.meta.field;
 
 public class ReferencingTableModel extends BaseTableModel {
 
@@ -61,7 +65,6 @@ public class ReferencingTableModel extends BaseTableModel {
     public Query createQuery(Document doc) {
         BooleanQuery.Builder queryBuilder = new BooleanQuery.Builder();
 
-        BooleanQuery.Builder queryBuilder = new BooleanQuery.Builder();
         // linkedItems queries
         String[] linkedItems = doc.getValues(ExtraProperties.LINKED_ITEMS);
         if (linkedItems.length > 0) {
@@ -107,15 +110,6 @@ public class ReferencingTableModel extends BaseTableModel {
         String ufedFileId = doc.get(ExtraProperties.UFED_FILE_ID);
         if (ufedFileId != null) {
             queryBuilder.add(new TermQuery(new Term(ExtraProperties.UFED_ID, ufedFileId)), Occur.SHOULD);
-        }
-
-        BooleanQuery query = queryBuilder.build();
-
-        if (!query.clauses().isEmpty()) {
-
-            Set<BytesRef> hashes = Arrays.asList(sharedHashes).stream().filter(StringUtils::isNotBlank)
-                    .map(h -> new BytesRef(h)).collect(Collectors.toSet());
-            queryBuilder.add(new TermInSetQuery(field, hashes), Occur.SHOULD);
         }
 
         return queryBuilder.build();
