@@ -26,10 +26,12 @@ import javax.swing.ListSelectionModel;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.lucene.document.Document;
+import org.apache.lucene.index.Term;
 import org.apache.lucene.search.BooleanClause.Occur;
 import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.TermInSetQuery;
+import org.apache.lucene.search.TermQuery;
 import org.apache.lucene.util.BytesRef;
 
 import iped.data.IItem;
@@ -88,6 +90,13 @@ public class ReferencedByTableModel extends BaseTableModel {
         if (!hashes.isEmpty()) {
             queryBuilder.add(new TermInSetQuery(ExtraProperties.LINKED_ITEMS, hashes), Occur.SHOULD);
             queryBuilder.add(new TermInSetQuery(ExtraProperties.SHARED_HASHES, hashes), Occur.SHOULD);
+        }
+
+        // ufed:id
+        String ufedId = doc.get(ExtraProperties.UFED_ID);
+        if (StringUtils.isNotBlank(ufedId)) {
+            queryBuilder.add(new TermQuery(new Term(ExtraProperties.UFED_JUMP_TARGETS, ufedId)), Occur.SHOULD);
+            queryBuilder.add(new TermQuery(new Term(ExtraProperties.UFED_FILE_ID, ufedId)), Occur.SHOULD);
         }
 
         return queryBuilder.build();

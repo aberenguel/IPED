@@ -43,7 +43,6 @@ import iped.parsers.emule.KnownMetParser;
 import iped.parsers.shareaza.ShareazaLibraryDatParser;
 import iped.properties.BasicProps;
 import iped.properties.ExtraProperties;
-import scala.annotation.meta.field;
 
 public class ReferencingTableModel extends BaseTableModel {
 
