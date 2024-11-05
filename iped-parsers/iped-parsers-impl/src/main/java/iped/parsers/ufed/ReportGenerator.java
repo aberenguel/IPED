@@ -70,18 +70,23 @@ public class ReportGenerator {
         if ((lat == null || lon == null) && localization != null) {
             String coord = localization.getLocations();
             String[] coordSplit = coord.split(";");
-            lat = StringUtils.firstNonBlank(lat, coordSplit[0]);
-            lon = StringUtils.firstNonBlank(lat, coordSplit[1]);
+            if (coordSplit.length == 2) {
+                lat = coordSplit[0];
+                lon = coordSplit[1];
+            }
         }
-        
-        lat = StringUtils.defaultString(lat).replace(",", ".");
-        lon = StringUtils.defaultString(lon).replace(",", ".");
 
-        DivTag div = div(img(attrs(".location")), b(Messages.getString("UfedChatReport.Location.Title")), br(),
-                table(attrs(".contact-table"), //
-                        tr(td(Messages.getString("UfedChatReport.Location.Latitude")), td(lat)),
-                        tr(td(Messages.getString("UfedChatReport.Location.Longitude")), td(lon))),
-                br());
+        lat = StringUtils.replace(lat, ",", ".");
+        lon = StringUtils.replace(lon, ",", ".");
+
+        DivTag div = div(img(attrs(".location")), b(Messages.getString("UFEDChatParser.Location.Title")), br());
+
+        if (!StringUtils.isAllBlank(lat, lon)) {
+            div.with(table(attrs(".contact-table"), //
+                    tr(td(Messages.getString("UFEDChatParser.Location.Latitude")), td(lat)), //
+                    tr(td(Messages.getString("UFEDChatParser.Location.Longitude")), td(lon))), //
+                    br());
+        }
 
         if (localization != null) {
             String name = localization.getName();
@@ -91,10 +96,14 @@ public class ReportGenerator {
             String city = localization.getCity();
             String state = localization.getState();
             String country = localization.getCountry();
+            String positionAddress = localization.getPositionAddress();
             String complement = Arrays.asList(city, state, country).stream().filter(StringUtils::isNotBlank).collect(Collectors.joining(" - "));
 
             if (isNotBlank(name)) {
                 div.with(span(name), br());
+            }
+            if (isNotBlank(positionAddress)) {
+                div.with(span(i(positionAddress)), br());
             }
             if (isNotBlank(street)) {
                 String fullStreet = street;
@@ -119,7 +128,7 @@ public class ReportGenerator {
             return StringUtils.EMPTY;
         }
 
-        DivTag div = div(b(Messages.getString("UfedChatReport.SharedContact.Title")), br());
+        DivTag div = div(b(Messages.getString("UFEDChatParser.SharedContact.Title")), br());
 
         for (MessageContact msgContact : message.getSharedContacts()) {
 
@@ -127,7 +136,7 @@ public class ReportGenerator {
             String name = StringUtils.firstNonBlank(msgContact.getName(), contact != null ? contact.getName() : null);
 
             TableTag table = table(attrs(".contact-table"),
-                    tr(td(Messages.getString("UfedChatReport.SharedContact.Name")), td(name)));
+                    tr(td(Messages.getString("UFEDChatParser.SharedContact.Name")), td(name)));
 
             if (contact != null) {
 
@@ -136,15 +145,15 @@ public class ReportGenerator {
                 String phone = contact.getPhoneNumber();
 
                 if (isNotBlank(userID)) {
-                    table.with(tr(td(Messages.getString("UfedChatReport.SharedContact.UserID")), td(userID)));
+                    table.with(tr(td(Messages.getString("UFEDChatParser.SharedContact.UserID")), td(userID)));
                 }
 
                 if (isNotBlank(username)) {
-                    table.with(tr(td(Messages.getString("UfedChatReport.SharedContact.Username")), td(username)));
+                    table.with(tr(td(Messages.getString("UFEDChatParser.SharedContact.Username")), td(username)));
                 }
 
                 if (isNotBlank(phone)) {
-                    table.with(tr(td(Messages.getString("UfedChatReport.SharedContact.PhoneNumber")), td(phone)));
+                    table.with(tr(td(Messages.getString("UFEDChatParser.SharedContact.PhoneNumber")), td(phone)));
                 }
             }
 
@@ -161,7 +170,7 @@ public class ReportGenerator {
         ByteArrayOutputStream bout = new ByteArrayOutputStream();
         PrintWriter out = new PrintWriter(new OutputStreamWriter(bout, "UTF-8"));
 
-        String title = getChatTitle(chat);
+        String title = UFEDChatParser.getChatName2(chat);
         String source = readUfedMetadata(chat.getItem(), "Source");
 
         printMessageFileHeader(out, title, title, chat.getContactPhotoThumb(), source);
@@ -302,9 +311,9 @@ public class ReportGenerator {
             String forwardedBy = "";
             String originalSender = message.getOriginalSender();
             if (isNotBlank(originalSender)) {
-                forwardedBy = Messages.getString("UfedChatReport.Forwarded.By") + " " + originalSender;
+                forwardedBy = Messages.getString("UFEDChatParser.Forwarded.By") + " " + originalSender;
             }
-            out.println("<img class=\"fwd\"><span class=\"fwd\"/>" + Messages.getString("UfedChatReport.Forwarded") + " " + forwardedBy + "</span><br/>");
+            out.println("<img class=\"fwd\"><span class=\"fwd\"/>" + Messages.getString("UFEDChatParser.Forwarded") + " " + forwardedBy + "</span><br/>");
         }
 
         if (message.isQuoted()) {
@@ -408,7 +417,7 @@ public class ReportGenerator {
 
         out.println("<span class=\"time\">");
         if (message.isEdited()) {
-            out.print(Messages.getString("UfedChatReport.Edited") + " ");
+            out.print(Messages.getString("UFEDChatParser.Edited") + " ");
         }
         if (message.getTimeStamp() != null) {
             out.println(timeFormat.format(message.getTimeStamp())); // $NON-NLS-1$
@@ -443,15 +452,17 @@ public class ReportGenerator {
         out.println("</span>");
 
         if (chatDeleted || message.getItem().isDeleted()) {
-            out.println("<br/><span class=\"recovered\">");
-            out.println("<i>" + Messages.getString("UfedChatReport.MessageDeletedRecovered") + "</i>");
-            out.println("<div class=\"deletedIcon\"></div>");
-            out.println("</span>");
-        } else if (message.isTrash()) {
-            out.println("<br/><span class=\"recovered\">");
-            out.println("<i>" + Messages.getString("UfedChatReport.MessageRecovered") + "</i>");
-            out.println("<div class=\"trashIcon\"></div>");
-            out.println("</span>");
+            if (message.isTrash()) {
+                out.println("<br/><span class=\"recovered\">");
+                out.println("<i>" + Messages.getString("UFEDChatParser.MessageRecovered") + "</i>");
+                out.println("<div class=\"trashIcon\"></div>");
+                out.println("</span>");
+            } else {
+                out.println("<br/><span class=\"recovered\">");
+                out.println("<i>" + Messages.getString("UFEDChatParser.MessageDeletedRecovered") + "</i>");
+                out.println("<div class=\"deletedIcon\"></div>");
+                out.println("</span>");
+            }
         }
         if (isTo)
             out.println("</div><div class=\"aw\"><div class=\"awr\"></div></div>");
@@ -481,7 +492,7 @@ public class ReportGenerator {
             String quoteEnd = "</span></div>";
             if (messageQuote.getItem().isDeleted()) {
                 quoteEnd = "</span><br/><span style=\"float:none\" class=\"recovered\"><div class=\"deletedIcon\"></div><i>"
-                        + Messages.getString("UfedChatReport.MessageDeletedRecovered") + "</i>" + quoteEnd;
+                        + Messages.getString("UFEDChatParser.MessageDeletedRecovered") + "</i>" + quoteEnd;
             }
 
             StringBuilder msgStr = new StringBuilder();
