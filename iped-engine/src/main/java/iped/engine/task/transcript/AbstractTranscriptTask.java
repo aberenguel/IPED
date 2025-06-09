@@ -66,24 +66,11 @@ public abstract class AbstractTranscriptTask extends AbstractTask {
 
     protected AudioTranscriptConfig transcriptConfig;
 
-    private String diskStoreDir = System.getProperty("user.home") + "/.iped/cache/audio-transcription";
-    
-    // Configure and create the CacheManager
-    private CacheManager cacheManager = CacheManagerBuilder.newCacheManagerBuilder()
-            .with(CacheManagerBuilder.persistence(diskStoreDir ))
-            .withCache(getClass().getSimpleName() + "Cache",
-                    CacheConfigurationBuilder.newCacheConfigurationBuilder(
-                            String.class,
-                            TextAndScore.class,
-                            ResourcePoolsBuilder.newResourcePoolsBuilder()
-                                    .heap(1, MemoryUnit.MB)
-                                    .offheap(20, MemoryUnit.MB)
-                                    .disk(70, MemoryUnit.MB, true)
-                    )
-            )
-            .build(true);
+    // Cache
+    private static final String CACHE_ALIAS = "AudioTranscriptionCache";
+    private static CacheManager cacheManager;
+    private Cache<String, TextAndScore> cache;
 
-    private Cache<String, TextAndScore> transcriptionCache = cacheManager.getCache(getClass().getSimpleName() + "Cache", String.class, TextAndScore.class);
 
     // Variables to store some statistics
     private static final AtomicLong wavTime = new AtomicLong();
@@ -100,7 +87,28 @@ public abstract class AbstractTranscriptTask extends AbstractTask {
     public boolean isEnabled() {
         return transcriptConfig.isEnabled();
     }
-
+    
+    private static synchronized void initializeCacheManager() {
+        
+        if (cacheManager != null) {
+            return;
+        }
+        
+        String diskStoreDir = System.getProperty("user.home") + "/.iped/ehcache/transcription";
+        
+        cacheManager = CacheManagerBuilder.newCacheManagerBuilder()
+                .with(CacheManagerBuilder.persistence(diskStoreDir))
+                .withCache(CACHE_ALIAS,
+                        CacheConfigurationBuilder.newCacheConfigurationBuilder(
+                                String.class,
+                                TextAndScore.class,
+                                ResourcePoolsBuilder.newResourcePoolsBuilder()
+                                        .heap(1, MemoryUnit.MB)
+                                        .offheap(20, MemoryUnit.MB)
+                                        .disk(70, MemoryUnit.MB, true)))
+                .build(true);
+    }
+    
     protected boolean isToProcess(IItem evidence) {
 
         if (evidence.getLength() == null || evidence.getLength() == 0 || !evidence.isToAddToCase() || evidence.getMetadata().get(ExtraProperties.TRANSCRIPT_ATTR) != null) {
@@ -160,6 +168,10 @@ public abstract class AbstractTranscriptTask extends AbstractTask {
         this.transcriptConfig.clearTranscriptionServiceAddress(output);
         // clear profile config service address in output
         this.transcriptConfig.clearTranscriptionServiceAddress(new File(output, "profile"));
+
+        initializeCacheManager();
+        cache = cacheManager.getCache("AudioTranscriptionCache", String.class, TextAndScore.class);
+
     }
 
     public static TextAndScore transcribeWavBreaking(File tmpFile, String itemPath, Function<File, TextAndScore> transcribeWavPart) throws Exception {
@@ -346,7 +358,7 @@ public abstract class AbstractTranscriptTask extends AbstractTask {
         if (evidence.getMetadata().get(ExtraProperties.TRANSCRIPT_ATTR) != null && evidence.getMetadata().get(ExtraProperties.CONFIDENCE_ATTR) != null)
             return;
 
-        TextAndScore prevResult = transcriptionCache.get(evidence.getHash());
+        TextAndScore prevResult = cache.get(evidence.getHash());
         if (prevResult != null) {
             evidence.getMetadata().set(ExtraProperties.CONFIDENCE_ATTR, Double.toString(prevResult.score));
             evidence.getMetadata().set(ExtraProperties.TRANSCRIPT_ATTR, prevResult.text);
@@ -374,7 +386,7 @@ public abstract class AbstractTranscriptTask extends AbstractTask {
             if (result != null) {
                 evidence.getMetadata().set(ExtraProperties.CONFIDENCE_ATTR, Double.toString(result.score));
                 evidence.getMetadata().set(ExtraProperties.TRANSCRIPT_ATTR, result.text);
-                transcriptionCache.put(evidence.getHash(), result);
+                cache.put(evidence.getHash(), result);
                 transcriptionSuccess.incrementAndGet();
                 if (result.text != null) {
                     transcriptionChars.addAndGet(result.text.length());
