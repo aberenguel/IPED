@@ -52,11 +52,8 @@ import org.apache.tika.parser.ParseContext;
 import org.apache.tika.sax.XHTMLContentHandler;
 import org.ehcache.Cache;
 import org.ehcache.CacheManager;
-import org.ehcache.Status;
 import org.ehcache.config.builders.CacheConfigurationBuilder;
-import org.ehcache.config.builders.CacheManagerBuilder;
 import org.ehcache.config.builders.ResourcePoolsBuilder;
-import org.ehcache.config.units.MemoryUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.xml.sax.ContentHandler;
@@ -80,7 +77,7 @@ import iped.utils.ImageUtil;
  * @author Nassif
  *
  */
-public class OCRParser extends AbstractParser implements AutoCloseable {
+public class OCRParser extends AbstractParser {
 
     /**
      * 
@@ -147,8 +144,6 @@ public class OCRParser extends AbstractParser implements AutoCloseable {
 
     // Cache
     private static final String CACHE_ALIAS = "OCRParserCache";
-    private static CacheManager cacheManager;
-    private Cache<String, String> cache;
 
     static {
         imageSupportedTypes.addAll(directSupportedTypes);
@@ -240,8 +235,6 @@ public class OCRParser extends AbstractParser implements AutoCloseable {
     }
 
     public OCRParser() {
-        LOGGER.error("OCRParser " + this);
-
         String tesseractPath = TOOL_NAME;
         if (!TOOL_PATH.isEmpty())
             tesseractPath = TOOL_PATH + "/" + TOOL_NAME; //$NON-NLS-1$ //$NON-NLS-2$
@@ -275,36 +268,11 @@ public class OCRParser extends AbstractParser implements AutoCloseable {
                     if (command[i].equals("-psm")) //$NON-NLS-1$
                         command[i] = "--psm"; //$NON-NLS-1$
             }
-            
-            if (ENABLED) {
-                initializeCacheManager();
-                cache = cacheManager.getCache(CACHE_ALIAS, String.class, String.class);
-            }
+
 
         } catch (IOException | InterruptedException e) {
             throw new RuntimeException("Error running " + cmd[0], e); //$NON-NLS-1$
         }
-    }
-    
-    private static synchronized void initializeCacheManager() {
-        
-        if (cacheManager != null) {
-            return;
-        }
-        
-        String diskStoreDir = System.getProperty("user.home") + "/.iped/ehcache/ocr";
-        
-        cacheManager = CacheManagerBuilder.newCacheManagerBuilder()
-                .with(CacheManagerBuilder.persistence(diskStoreDir))
-                .withCache(CACHE_ALIAS,
-                        CacheConfigurationBuilder.newCacheConfigurationBuilder(
-                                String.class,
-                                String.class,
-                                ResourcePoolsBuilder.newResourcePoolsBuilder()
-                                        .heap(1, MemoryUnit.MB)
-                                        .offheap(20, MemoryUnit.MB)
-                                        .disk(70, MemoryUnit.MB, true)))
-                .build(true);
     }
 
     private boolean isFromBookmarkToOCR(ItemInfo ocrContext) {
@@ -324,16 +292,21 @@ public class OCRParser extends AbstractParser implements AutoCloseable {
         return false;
     }
 
-    @Override
-    public void close()  {
-        if (cacheManager != null) {
-            synchronized (cacheManager) {
-                if (cacheManager.getStatus() == Status.AVAILABLE) {
-                    LOGGER.error("Closing " + this);
-                    cacheManager.close();
-                }
-            }
+    private synchronized Cache<String, String> getOrCreateCache(ParseContext context) {
+
+        CacheManager cacheManager = context.get(CacheManager.class);
+        ResourcePoolsBuilder defaultResourcePoolsBuilder = context.get(ResourcePoolsBuilder.class);
+
+        Cache<String, String> cache = cacheManager.getCache(CACHE_ALIAS, String.class, String.class);
+        if (cache != null) {
+            return cache;
         }
+
+        return cacheManager.createCache(CACHE_ALIAS, //
+                CacheConfigurationBuilder.newCacheConfigurationBuilder( //
+                        String.class, //
+                        String.class, //
+                        defaultResourcePoolsBuilder));
     }
 
     /**
@@ -346,6 +319,8 @@ public class OCRParser extends AbstractParser implements AutoCloseable {
 
         if (!ENABLED)
             return;
+
+        Cache<String, String> cache = getOrCreateCache(context);
 
         CharCountContentHandler countHandler = new CharCountContentHandler(handler);
         XHTMLContentHandler xhtml = new XHTMLContentHandler(countHandler, metadata);

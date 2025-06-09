@@ -48,7 +48,7 @@ import org.apache.tika.parser.Parser;
 import org.apache.tika.parser.html.HtmlMapper;
 import org.apache.tika.parser.html.IdentityHtmlMapper;
 import org.apache.tika.utils.XMLReaderUtils;
-import org.ehcache.PersistentCacheManager;
+import org.ehcache.CacheManager;
 import org.ehcache.config.builders.ResourcePoolsBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -237,7 +237,7 @@ public class ParsingTask extends ThumbTask implements EmbeddedDocumentExtractor 
         ItemInfo itemInfo = ItemInfoFactory.getItemInfo(evidence);
         context.set(ItemInfo.class, itemInfo);
         context.set(OCROutputFolder.class, new OCROutputFolder(output));
-        context.set(PersistentCacheManager.class, cacheConfig.getCacheManager());
+        context.set(CacheManager.class, cacheConfig.getCacheManager());
         context.set(ResourcePoolsBuilder.class, cacheConfig.getDefaultResourcePoolsBuilder());
 
         if (CarverTask.ignoreCorrupted && caseData != null && !caseData.isIpedReport()) {
@@ -321,6 +321,7 @@ public class ParsingTask extends ThumbTask implements EmbeddedDocumentExtractor 
                 task = new ParsingTask(worker, autoParser);
                 task.parsingConfig = this.parsingConfig;
                 task.expandConfig = this.expandConfig;
+                task.cacheConfig = this.cacheConfig;
                 task.safeProcess(evidence);
 
             } finally {
@@ -884,18 +885,6 @@ public class ParsingTask extends ThumbTask implements EmbeddedDocumentExtractor 
             WhatsAppParser.clearStaticResources();
         }
         totalText = null;
-
-        autoParser.getParsers().values().parallelStream()
-        .filter(AutoCloseable.class::isInstance)
-        .distinct()
-        .map(AutoCloseable.class::cast)
-        .forEach(ac -> {
-            try {
-                ac.close();
-            } catch (Exception e) {
-                LOGGER.error("Error closing " + ac, e);
-            }
-        });
     }
 
     public static void copyTimesPerParser(Map<String,Long> dest) {

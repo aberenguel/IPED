@@ -26,12 +26,7 @@ import org.apache.tika.io.TemporaryResources;
 import org.apache.tika.mime.MediaType;
 import org.apache.tika.utils.SystemUtils;
 import org.ehcache.Cache;
-import org.ehcache.CacheManager;
-import org.ehcache.Status;
 import org.ehcache.config.builders.CacheConfigurationBuilder;
-import org.ehcache.config.builders.CacheManagerBuilder;
-import org.ehcache.config.builders.ResourcePoolsBuilder;
-import org.ehcache.config.units.MemoryUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,6 +34,7 @@ import iped.configuration.Configurable;
 import iped.configuration.IConfigurationDirectory;
 import iped.data.IItem;
 import iped.engine.config.AudioTranscriptConfig;
+import iped.engine.config.CacheConfig;
 import iped.engine.config.Configuration;
 import iped.engine.config.ConfigurationManager;
 import iped.engine.io.TimeoutException;
@@ -68,7 +64,6 @@ public abstract class AbstractTranscriptTask extends AbstractTask {
 
     // Cache
     private static final String CACHE_ALIAS = "AudioTranscriptionCache";
-    private static CacheManager cacheManager;
     private Cache<String, TextAndScore> cache;
 
 
@@ -83,32 +78,12 @@ public abstract class AbstractTranscriptTask extends AbstractTask {
 
     protected IItem evidence;
 
+
     @Override
     public boolean isEnabled() {
         return transcriptConfig.isEnabled();
     }
-    
-    private static synchronized void initializeCacheManager() {
-        
-        if (cacheManager != null) {
-            return;
-        }
-        
-        String diskStoreDir = System.getProperty("user.home") + "/.iped/ehcache/transcription";
-        
-        cacheManager = CacheManagerBuilder.newCacheManagerBuilder()
-                .with(CacheManagerBuilder.persistence(diskStoreDir))
-                .withCache(CACHE_ALIAS,
-                        CacheConfigurationBuilder.newCacheConfigurationBuilder(
-                                String.class,
-                                TextAndScore.class,
-                                ResourcePoolsBuilder.newResourcePoolsBuilder()
-                                        .heap(1, MemoryUnit.MB)
-                                        .offheap(20, MemoryUnit.MB)
-                                        .disk(70, MemoryUnit.MB, true)))
-                .build(true);
-    }
-    
+
     protected boolean isToProcess(IItem evidence) {
 
         if (evidence.getLength() == null || evidence.getLength() == 0 || !evidence.isToAddToCase() || evidence.getMetadata().get(ExtraProperties.TRANSCRIPT_ATTR) != null) {
@@ -169,9 +144,22 @@ public abstract class AbstractTranscriptTask extends AbstractTask {
         // clear profile config service address in output
         this.transcriptConfig.clearTranscriptionServiceAddress(new File(output, "profile"));
 
-        initializeCacheManager();
-        cache = cacheManager.getCache("AudioTranscriptionCache", String.class, TextAndScore.class);
+        this.cache = getOrCreateCache(configurationManager);
+    }
 
+    private synchronized Cache<String, TextAndScore> getOrCreateCache(ConfigurationManager configurationManager) {
+        CacheConfig cacheConfig = configurationManager.findObject(CacheConfig.class);
+
+        Cache<String, TextAndScore> cache = cacheConfig.getCacheManager().getCache(CACHE_ALIAS, String.class, TextAndScore.class);
+        if (cache != null) {
+            return cache;
+        }
+
+        return cacheConfig.getCacheManager().createCache(CACHE_ALIAS, //
+                CacheConfigurationBuilder.newCacheConfigurationBuilder( //
+                        String.class, //
+                        TextAndScore.class, //
+                        cacheConfig.getDefaultResourcePoolsBuilder()));
     }
 
     public static TextAndScore transcribeWavBreaking(File tmpFile, String itemPath, Function<File, TextAndScore> transcribeWavPart) throws Exception {
@@ -293,12 +281,6 @@ public abstract class AbstractTranscriptTask extends AbstractTask {
 
     @Override
     public void finish() throws Exception {
-
-        synchronized (cacheManager) {
-            if (cacheManager.getStatus() == Status.AVAILABLE) {
-                cacheManager.close();
-            }
-        }
 
         long totWavConversions = wavSuccess.longValue() + wavFail.longValue();
         if (totWavConversions != 0) {
