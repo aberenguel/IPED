@@ -25,11 +25,6 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.nio.file.Files;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -54,10 +49,15 @@ import org.apache.tika.mime.MediaType;
 import org.apache.tika.parser.AbstractParser;
 import org.apache.tika.parser.ParseContext;
 import org.apache.tika.sax.XHTMLContentHandler;
+import org.ehcache.Cache;
+import org.ehcache.CacheManager;
+import org.ehcache.Status;
+import org.ehcache.config.builders.CacheConfigurationBuilder;
+import org.ehcache.config.builders.CacheManagerBuilder;
+import org.ehcache.config.builders.ResourcePoolsBuilder;
+import org.ehcache.config.units.MemoryUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.sqlite.SQLiteConfig;
-import org.sqlite.SQLiteConfig.SynchronousMode;
 import org.xml.sax.ContentHandler;
 import org.xml.sax.SAXException;
 
@@ -96,16 +96,6 @@ public class OCRParser extends AbstractParser implements AutoCloseable {
 
     private static final String CHILD_PREFIX = "-child-"; //$NON-NLS-1$
 
-    private static final String OCR_STORAGE = "ocr-results.db"; //$NON-NLS-1$
-
-    private static final String CREATE_TABLE = "CREATE TABLE IF NOT EXISTS ocr(id TEXT PRIMARY KEY, text TEXT);"; //$NON-NLS-1$
-
-    private static final String INSERT_DATA = "INSERT INTO ocr(id, text) VALUES(?,?) ON CONFLICT(id) DO NOTHING"; //$NON-NLS-1$
-
-    private static final String SELECT_EXACT = "SELECT text FROM ocr WHERE id=?;"; //$NON-NLS-1$
-
-    private static final String SELECT_ALL = "SELECT id, text FROM ocr WHERE id >= ? AND id < ?"; //$NON-NLS-1$
-
     private static final String TESSERACT_ERROR_MSG = "tesseract returned error code ";
 
     private static final String INPUT_FILE_TOKEN = "${INPUT}"; //$NON-NLS-1$
@@ -140,8 +130,6 @@ public class OCRParser extends AbstractParser implements AutoCloseable {
     private static AtomicBoolean checked = new AtomicBoolean();
     private static String tessVersion = "";
 
-    private static HashMap<File, Connection> connMap = new HashMap<>();
-
     private static final Set<MediaType> directSupportedTypes = getDirectSupportedTypes();
     private static final Set<MediaType> nonStandardSupportedTypes = getNonStandardSupportedTypes();
     private static final Set<MediaType> nonImageSupportedTypes = getNonImageSupportedTypes();
@@ -155,6 +143,25 @@ public class OCRParser extends AbstractParser implements AutoCloseable {
     private File outputBase;
     private String[] command;
     private Random random = new Random();
+
+    private static String diskStoreDir = System.getProperty("user.home") + "/.iped/cache/ocr";
+    
+    // Configure and create the CacheManager
+    private static CacheManager cacheManager = CacheManagerBuilder.newCacheManagerBuilder()
+            .with(CacheManagerBuilder.persistence(diskStoreDir ))
+            .withCache("OCRParserCache",
+                    CacheConfigurationBuilder.newCacheConfigurationBuilder(
+                            String.class,
+                            String.class,
+                            ResourcePoolsBuilder.newResourcePoolsBuilder()
+                                    .heap(1, MemoryUnit.MB)
+                                    .offheap(20, MemoryUnit.MB)
+                                    .disk(70, MemoryUnit.MB, true)
+                    )
+            )
+            .build(true);
+
+    private Cache<String, String> ocrCache = cacheManager.getCache("OCRParserCache", String.class, String.class);
 
     static {
         imageSupportedTypes.addAll(directSupportedTypes);
@@ -303,37 +310,12 @@ public class OCRParser extends AbstractParser implements AutoCloseable {
         return false;
     }
 
-    private static synchronized Connection getConnection(File outputBase) {
-        File db = new File(outputBase, OCR_STORAGE);
-        Connection conn = connMap.get(db);
-        if (conn != null) {
-            return conn;
-        }
-        db.getParentFile().mkdirs();
-        try {
-            SQLiteConfig config = new SQLiteConfig();
-            config.setSynchronous(SynchronousMode.NORMAL);
-            config.setBusyTimeout(3600000);
-            conn = config.createConnection("jdbc:sqlite:" + db.getAbsolutePath());
-            connMap.put(db, conn);
-
-            try (Statement stmt = conn.createStatement()) {
-                stmt.executeUpdate(CREATE_TABLE);
-            }
-
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
-        return conn;
-    }
-
     @Override
-    public void close() throws SQLException {
-        synchronized (this.getClass()) {
-            for (Connection con : connMap.values()) {
-                con.close();
+    public void close()  {
+        synchronized (cacheManager) {
+            if (cacheManager.getStatus() == Status.AVAILABLE) {
+                cacheManager.close();
             }
-            connMap.clear();
         }
     }
 
@@ -377,7 +359,7 @@ public class OCRParser extends AbstractParser implements AutoCloseable {
                         outFileName += CHILD_PREFIX + itemInfo.getChild(); // $NON-NLS-1$
                     }
 
-                    String ocrText = getOcrTextFromDb(outFileName, outputBase);
+                    String ocrText = ocrCache.get(outFileName);
                     if (ocrText != null) {
                         extractOutput(ocrText, xhtml); //$NON-NLS-1$
                         return;
@@ -426,7 +408,7 @@ public class OCRParser extends AbstractParser implements AutoCloseable {
                     }
 
                     String ocrText = new String(bytes, "UTF-8").trim(); //$NON-NLS-1$
-                    storeOcrTextInDb(outFileName, ocrText, outputBase);
+                    ocrCache.put(outFileName, ocrText);
 
                 } else {
                     extractOutput(output, xhtml);
@@ -443,49 +425,6 @@ public class OCRParser extends AbstractParser implements AutoCloseable {
             }
             tmp.dispose();
         }
-    }
-
-    private static String getOcrTextFromDb(String id, File outputBase) throws IOException {
-        try (PreparedStatement ps = getConnection(outputBase).prepareStatement(SELECT_EXACT)) {
-            ps.setString(1, id);
-            ResultSet rs = ps.executeQuery();
-            if (rs.next()) {
-                return rs.getString(1);
-            }
-        } catch (SQLException e) {
-            throw new IOException(e);
-        }
-        return null;
-    }
-
-    private static void storeOcrTextInDb(String id, String ocrText, File outputBase) throws IOException {
-        try (PreparedStatement ps = getConnection(outputBase).prepareStatement(INSERT_DATA)) {
-            ps.setString(1, id);
-            ps.setString(2, ocrText);
-            ps.executeUpdate();
-        } catch (SQLException e) {
-            throw new IOException(e);
-        }
-    }
-
-    public static void copyOcrResults(String hash, File inputBase, File outputBase) throws IOException {
-        File sourceDb = new File(inputBase, OCRParser.TEXT_DIR + File.separator + OCRParser.OCR_STORAGE);
-        File targetDb = new File(outputBase, OCRParser.TEXT_DIR + File.separator + OCRParser.OCR_STORAGE);
-        if (!sourceDb.exists())
-            return;
-        try (PreparedStatement ps = getConnection(sourceDb.getParentFile()).prepareStatement(SELECT_ALL)) {
-            ps.setString(1, hash);
-            ps.setString(2, hash.substring(0, hash.length() - 1) + (char) (hash.charAt(hash.length() - 1) + 1));
-            ResultSet rs = ps.executeQuery();
-            while (rs.next()) {
-                String id = rs.getString(1);
-                String ocrText = rs.getString(2);
-                storeOcrTextInDb(id, ocrText, targetDb.getParentFile());
-            }
-        } catch (SQLException e) {
-            throw new IOException(e);
-        }
-
     }
 
     private void parseTiff(XHTMLContentHandler xhtml, TemporaryResources tmp, File input, File output, String itemPath)
